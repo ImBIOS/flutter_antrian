@@ -1,7 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-void main() {
-  runApp(const MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -49,18 +56,47 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+  int _queue = 0;
+  int _totalQueue = 0;
 
-  void _incrementCounter() {
+  CollectionReference queues = FirebaseFirestore.instance.collection('antrian');
+
+  Future<void> addQueue() {
+    bool isFinal = (_totalQueue <= _queue);
     setState(() {
       // This call to setState tells the Flutter framework that something has
       // changed in this State, which causes it to rerun the build method below
       // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
+      // _queue without calling setState(), then the build method would not be
       // called again, and so nothing would appear to happen.
-      _counter++;
+      if (!isFinal) _queue++;
     });
+
+    // Call the user's CollectionReference to add a new user
+    if (!isFinal) {
+      return queues
+          .doc('antrian-20220207040712028xfe')
+          .set(
+            {
+              'antrianSekarang': _queue,
+              // 'urutan': {
+              //   1: 'user-DQEycs3uv3RYBfmbMreO',
+              //   2: 'user-Qxu626m8qZ31xuaKByVR',
+              // },
+            },
+            SetOptions(merge: true),
+          )
+          .then((value) => print("Queue Added"))
+          .catchError((error) => print("Failed to add queue: $error"));
+    }
+
+    return Future.value();
   }
+
+  final Stream<DocumentSnapshot> _queuesStream = FirebaseFirestore.instance
+      .collection('antrian')
+      .doc('antrian-20220207040712028xfe')
+      .snapshots();
 
   @override
   Widget build(BuildContext context) {
@@ -97,17 +133,39 @@ class _MyHomePageState extends State<MyHomePage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
             const Text(
-              'You have pushed the button this many times:',
+              'Sekarang antrian nomer:',
             ),
             Text(
-              '$_counter',
+              '$_queue',
               style: Theme.of(context).textTheme.headline4,
             ),
+            const Text(
+              'Total antrian:',
+            ),
+            StreamBuilder<DocumentSnapshot>(
+              stream: _queuesStream,
+              builder: (BuildContext context,
+                  AsyncSnapshot<DocumentSnapshot> snapshot) {
+                if (snapshot.hasError) {
+                  return Text('Something went wrong');
+                }
+
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return Text("Loading");
+                }
+
+                _totalQueue = snapshot.data!['urutan'].length;
+                return Text(
+                  snapshot.data!['urutan'].length.toString(),
+                  style: Theme.of(context).textTheme.headline4,
+                );
+              },
+            )
           ],
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
+        onPressed: addQueue,
         tooltip: 'Increment',
         child: const Icon(Icons.add),
       ), // This trailing comma makes auto-formatting nicer for build methods.
